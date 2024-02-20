@@ -1,0 +1,371 @@
+spring:
+  application:
+    name: Sla Automation
+  main:
+    allow-circular-references: true
+sla:
+
+slaUser:
+  baseUrl: https://dev.azure.com/premierinc/_apis/wit/wiql?api-version=6.0
+  slaData: ${slaUser.baseUrl}/api/2/search?
+  sprintName: ${slaUser.baseUrl}/agile/1.0/sprint/
+
+#one time configuration
+project:
+  projectkey: SupplyAnalytics
+  projectsource: ADO
+  projecturl: https://dev.azure.com/premierinc/_apis/wit/wiql?api-version=6.0
+  backlogBoardIds:
+  nonbacklogBoardIds:
+  outputFolder:  E:\\AutomationOutput
+  automationData: E:\\AutomationData
+  datafileRequired: Y
+  detailedLogRequired: Y
+  addToFileName: yyyyMMddHHMMSS
+  dateFormat: MM/dd/yyyy
+  sourceDateFormat: yyyy-MM-dd'T'HH:mm:ss.SX #yyyy-MM-dd'T'HH:mm:ss.SSSZ
+  releaseDateFormat: yyyy-MM-dd
+  holidays: 01/17/2022,05/30/2022,06/20/2022,07/04/2022,09/05/2022,11/11/2022,11/20/2022,12/26/2022
+  linkItemUrl: https://analytics.dev.azure.com/premierinc/SDC16ServiceLevelAutomation/_odata/v2.0/WorkItems?$select=WorkItemId&$expand=Children($filter=WorkItemType in (DEFECTTYPEVALUE); $select=WorkItemId)&$filter=WorkItemId eq WORKITEMIDVALUE
+  itemUrl: https://dev.azure.com/premierinc/_apis/wit/workItems/WORKITEMIDVALUE
+  pageSize: 1000
+#Need to change at Each run
+variables:
+  teamProject: SupplyAnalytics #example: WFM
+  from: 10/01/2022  #mm/dd/yyyy //This is the start date of the month with different format
+  to:  10/31/2022 #mm/dd/yyyy //This is the end date of the month with different format
+  startofmonth: 2022/10/01  #example: yyyy-mm-dd 2022-11-01 //This field is for query measurement NBL
+  endofmonth: 2022/10/31 #example: yyyy-mm-dd 2022-11-30 //This field is for query measurement NBL
+  sprintStartDate: 2022/10/01 #example: yyyy-mm-dd 2022-11-01 //This field is for query measurement BL
+  sprintEndDate: 2022/10/31 #example: yyyy-mm-dd 2022-11-30 //This field is for query measurement BL
+  iterationPath: ('SupplyAnalytics\\FY23-S08','SupplyAnalytics\\FY23-S09') #example: ('WFM\\FY23-S03','WFM\\FY23-S04')
+  endDateCSTM: 2022/10/25 #example: yyyy-mm-dd 2022-11-24 #criticial security threat end date (end - 6 days)
+  areaPathBL: #example('WFM\\SDC16 - BL OA Productivity\\Avengers','WFM\\SDC16 - BL OA Productivity\\Matrix') #areapath for BL
+  areaPathNBL: #example('WFM\\SDC16 - NBL OA Productivity\\Marvel')  #areapath for NBL
+  areaPathNBLsec: #example('WFM\\SDC16 - NBL OA Productivity\\Marvel\\Security') #areapath for Security(Criticalsecuritythreatmitigation,Security threat mitigation)
+#It is for internal purpose no need to change
+slasbacklog:
+  backlogconfiguration:
+    -
+      slaname: Time To Estimate Backlog Item
+      slakey: TimeToEstimateBacklogItems
+      slatype: BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] not in ('Risk', 'Milestone') And [System.State] EVER 'In Analysis and Estimate'
+      limit: 3#10
+      config3: In analysis and estimate #Status used for the Issue when received for estimation
+      config4: In PI assigned with iteration
+      input2: Y #holidaycheck
+      input3: Y #weekendcheck
+      input4: Y #Include Start date
+
+    -
+      slaname: Timely Accepted Milestone Delivery
+      slakey: TimelyAcceptedMilestone
+      slatype: BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 98
+      minimumsla: 95
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Milestone' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Scheduling.DueDate] >='${variables.startofmonth}' And [Microsoft.VSTS.Scheduling.DueDate] <= '${variables.endofmonth}'
+      input1: '${variables.endofmonth}' #Measurment Period End DATE
+
+    -
+      slaname: Timely Backlog Item Delivery
+      slakey: TimelyBackLogItem
+      slatype: BackLog
+      expectedsla: 85
+      minimumsla: 75
+      numjql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}'  And [System.WorkItemType] not in ('Risk','Milestone') And [System.State] Ever ('Accepted') And [System.IterationPath] in ${variables.iterationPath} And [Microsoft.VSTS.Common.ClosedDate] <= '${variables.sprintEndDate}' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.sprintStartDate}'
+      denojql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] not in ('Risk','Milestone') And [System.IterationPath] in ${variables.iterationPath}
+      input1: ${variables.iterationPath} #Current Iteration Details
+    -
+      slaname: Estimation Quality
+      slakey: EstimationQuality
+      slatype: BackLog
+      expectedsla: 90
+      minimumsla: 80
+      denojql: Select * From WorkItems  Where [System.WorkItemType] not in ('Risk') And [System.TeamProject] = '${variables.teamProject}' And [System.State] in ('Accepted', 'Closed') And [Microsoft.VSTS.Common.StateChangeDate] >= '${variables.sprintStartDate}' And [System.IterationPath] in ${variables.iterationPath}
+      limit: 15
+
+    -
+      slaname: Percentage of tests automated
+      slakey: PercentageOfTestsAutomated
+      slatype: BackLog
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Milestone' And [System.TeamProject] = '${variables.teamProject}' AND [Custom.ServiceLevelType] = 'Production Release' AND [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+
+    -
+      slaname: Product - Percent Testing Completed
+      slakey: ProductPercentTestingCompleted
+      slatype: BackLog
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Milestone' And [System.TeamProject] = '${variables.teamProject}' AND [Custom.ServiceLevelType] = 'Production Release' AND [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+
+    -
+      slaname: Re-opened defects before production release
+      slakey: ReopenedDefectsBeforeProductionRelease
+      slatype: BackLog
+      expectedsla: 8
+      minimumsla: 20
+      denojql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] = 'Milestone' AND [Custom.ServiceLevelType] = 'Production Release' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <= '${variables.endofmonth}'
+      config1:
+      config2:
+      config3:
+      config4: BA Review #closed status for defect
+      input1: Defect #Delete the total number of Re-open Status if both development and re-open status is same.
+    -
+      slaname: Issues detected post-production release
+      slakey: IssuesDetectedPostProductionRelease
+      slatype: BackLog
+      expectedsla: 1
+      minimumsla: 2
+      denojql: Select * From WorkItems Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] = 'Milestone' And [Custom.ServiceLevelType] = 'Production Release' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      limit: 30
+      input1:
+      input3:
+      input4:
+
+    -
+      slaname: Defects Detected in User Acceptance Testing
+      slakey: DefectDetectedInUAT
+      slatype: BackLog
+      expectedsla: 95
+      minimumsla: 80
+      numjql:
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Milestone' And [System.TeamProject] = '${variables.teamProject}' AND [Custom.ServiceLevelType] = 'Production Release' And [System.State] Ever 'In Release' AND [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      config1: "'Defect'" #Issue type which represent a defect,user can add multiple data using comma
+
+    -
+      slaname: Backlog Item Quality Delivery
+      slakey: BacklogItemQuality
+      slatype: BackLog
+      expectedsla: 95
+      minimumsla: 85
+      denojql: Select * From WorkItems Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] not in ('Risk','Milestone') And [System.State] EVER 'Resolved' And [System.IterationPath] in ${variables.iterationPath}
+      config1:
+      config2:
+      config3:
+      config4:
+      config5: BA Review
+      input1: ${variables.iterationPath} #Current Iteration Details
+
+    -
+      slaname: Delay in Ready for Production Release
+      slakey: DelayInReadyForProductionRelease
+      slatype: BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 100
+      minimumsla: 95
+      denojql: Select * From WorkItems Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] = 'Milestone' And [Custom.ServiceLevelType] = 'Production Release' And [Microsoft.VSTS.Scheduling.DueDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Scheduling.DueDate] <='${variables.endofmonth}'
+
+slasnonbacklog:
+  nonbacklogconfiguration:
+    -
+      slaname: Severity Level 1 Incident Resolution
+      slakey: SeverityLvl1IncidentResolution
+      from:
+      to:
+      slatype: Non-BackLog
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity]= '1 - Critical' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      limit: 1
+      config1: In analysis and estimate #Committed Status of the Issue.
+      config2: Closed #Closed Status of the issue. Only two values accepted here
+      config3: N #N - Check the history by looking to the status (first occurance) mentioned in Config1. OR if a field provided (Created, Updated), then use the field value to get the committed date from the issue. The values could be N or Field Name (Created or Updated)
+      config4: Closed #N - Check the history by looking to the status mentioned in Config2. OR if a field provided (Closed, Resolution), then use the field value to get the closed date from the issue.. The values could be N or Field Name (Closed or Resolution)
+      input1:
+      input2: N #Holiday Check
+      input3: N #Weekend Check
+      input4: N #Include Committed date
+      input5:
+
+    -
+      slaname: Severity Level 2 Incident Resolution
+      slakey: SeverityLvl2IncidentResolution
+      From:
+      to:
+      slatype: Non-BackLog
+      expectedsla: 98
+      minimumsla: 90
+      denojql:  Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity]= '2 - High' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      limit: 15
+      config1: In analysis and estimate #Committed Status of the Issue.
+      config2: Closed #Closed Status of the issue. Only two values accepted here
+      config3: N #N - Check the history by looking to the status (first occurance) mentioned in Config1. OR if a field provided (Created, Updated), then use the field value to get the committed date from the issue. The values could be N or Field Name (Created or Updated)
+      config4: Closed #N - Check the history by looking to the status mentioned in Config2. OR if a field provided (Closed, Resolution), then use the field value to get the closed date from the issue.. The values could be N or Field Name (Closed or Resolution)
+      input1:
+      input2: N #Holiday Check
+      input3: N #Weekend Check
+      input4: N #Include Committed date
+      input5:
+
+    -
+      slaname: Severity Level 3 Incident Resolution
+      slakey: SeverityLvl3IncidentResolution
+      From:
+      to:
+      slatype: Non-BackLog
+      expectedsla: 98
+      minimumsla: 90
+      denojql:  Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity]= '3 - Medium' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      limit: 15
+      config1: In analysis and estimate #Committed Status of the Issue.
+      config2: Closed #Closed Status of the issue. Only two values accepted here
+      config3: N #N - Check the history by looking to the status (first occurance) mentioned in Config1. OR if a field provided (Created, Updated), then use the field value to get the committed date from the issue. The values could be N or Field Name (Created or Updated)
+      config4: Closed #N - Check the history by looking to the status mentioned in Config2. OR if a field provided (Closed, Resolution), then use the field value to get the closed date from the issue.. The values could be N or Field Name (Closed or Resolution)
+      input1: 0 #Starting Working Time of the Day
+      input2: N #Holiday Check
+      input3: N #Weekend Check
+      input4: N #Include Committed date
+      input5: 24 #Ending Working Time of the Day
+    -
+      slaname: Mean Time to Repair
+      slakey: MTTR
+      slatype: Non-BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 95
+      minimumsla: 85
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity] in ('1 - Critical', '2 - High', '3 - Medium') And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <= '${variables.endofmonth}'
+      limit: 1,3,15
+      config1: In analysis and estimate #Committed Status of the Issue.
+      config2: Closed #Closed Status of the issue. Only two values accepted here
+      config3: N #N - Check the history by looking to the status (first occurance) mentioned in Config1. OR if a field provided (Created, Updated), then use the field value to get the committed date from the issue. The values could be N or Field Name (Created or Updated)
+      config4: Closed #N - Check the history by looking to the status mentioned in Config2. OR if a field provided (Closed, Resolution), then use the field value to get the closed date from the issue.. The values could be N or Field Name (Closed or Resolution)
+      input1: 8 #Starting Working Time of the Day
+      input2: N,N,Y #Holiday Check
+      input3: N,N,Y #Weekend Check
+      input4: N #Include Committed date
+      input5: 23 #Ending Working Time of the Day
+
+    -
+      slaname: Problem Resolution Time
+      slakey: ProblemResolutionTime
+      slatype: Non-BackLog
+      expectedsla: 95
+      minimumsla: 85
+      denojql: Select * From WorkItems Where [System.WorkItemType] = 'Problem' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity] in ('1 - Critical', '2 - High', '3 - Medium') And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <= '${variables.endofmonth}'
+      limit: 15
+      config1: In Development
+      config2: Closed
+      config3: Created #Whether to check history or a specific date to get the committed date for the incident -> N - Check the history by looking to the status mentioned in Config1. OR procide the field name (Created, Updated). The values could be N or Field Name (Created or Updated)
+      config4: Closed #Whether to check history or a specific date to get the Closed date for the incident -> N - Check the history by looking to the status mentioned in Config2. OR procide the field name (Closed, Resolve). The values could be N or Field Name (Created or Updated)
+      input1:
+      input2: N #Holiday Check
+      input3: N #Weekend Check
+      input4: N #Whether to include committed date in day variance calculation
+      input5:
+    -
+      slaname: Problem Route cause Analysis Time
+      slakey: ProblemRCATime
+      slatype: Non-BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 95
+      minimumsla: 85
+      denojql: Select * From WorkItems Where [System.WorkItemType] = 'Problem' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <= '${variables.endofmonth}'
+      limit: 3,5,7 #P1, p2, p3 Limit
+      config1: In Development
+      config2: Closed #Closed or accepted status for the Incident. First Occurance
+      config3: Created #No need to check in history  #Whether to check history or a specific date to get the committed date for the incident -> N - Check the history by looking to the status mentioned in Config1. OR procide the field name (Created, Updated). The values could be N or Field Name (Created or Updated)
+      config4: Closed #Whether to check history or a specific date to get the Closed date for the incident -> N - Check the history by looking to the status mentioned in Config2. OR procide the field name (Closed, Resolution).
+      input1:
+      input2: N #Holiday Check
+      input3: N #Weekend Check
+      input4:
+      input5:
+    -
+      slaname: Patches
+      slakey: Patches
+      slatype: Non-BackLog
+      from: ${variables.from} #Measurement period Start
+      to: ${variables.to} #Measurement period End
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] = 'User Story' And [Custom.ServiceLevelType]= 'Patches' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      limit: 30
+      config1: In analysis and estimate #Committed Status of the Issue.
+      config2: Closed #Closed Status of the issue. Only two values accepted here
+      config3: N #N - Use N to check the revision if deno jql is not provided. If deno query is proded, use the date field used there
+      config4: Closed #N - Use N to check the revision if num jql is not provided. If num query is proded, use the date field used there
+      input2: N
+      input3: N
+
+    -
+      slaname: Percent Of Incident Opened
+      slakey: PercentOfIncidentOpened
+      slatype: Non-BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 5
+      minimumsla: 10
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity] in ('1 - Critical', '2 - High', '3 - Medium') and [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' and [Microsoft.VSTS.Common.ClosedDate] <= '${variables.endofmonth}'
+      limit: 3
+      config1: In analysis and estimate #Status to be checked for re-open
+      config2: Closed #Closed status for the Incident.
+      input2: Y #Holiday Check
+      input3: Y #Weekend Check
+
+    -
+      slaname: Volume of Incidents
+      slakey: VolumeOfIncidents
+      slatype: Non-BackLog
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity] in ('1 - Critical','2 - High','3 - Medium') And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.endofmonth}'
+      limit: 10 #Variance
+      config1: 10 #Baseline Avg - If not provided it will search in the baselineavg data file. Not a mandatory configuration. For first run please provide the value
+      input1: 3 #No of rolling months
+      input2: Select * From WorkItems  Where [System.WorkItemType] = 'Incident' And [System.TeamProject] = '${variables.teamProject}' And [Microsoft.VSTS.Common.Severity] in ('1 - Critical','2 - High','3 - Medium') #Query to search last configured rolling months to calculate current baseline
+
+    -
+      slaname: Critical Security Threat Mitigation
+      slakey: CriticalSecurityThreatMitigation
+      slatype: Non-BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 98
+      minimumsla: 95
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'User Story' And [System.TeamProject] = '${variables.teamProject}' And [Custom.ServiceLevelType] = 'Security Fix' And [Microsoft.VSTS.Common.Severity] in ('1 - Critical') And [System.State] Ever 'Closed' And [Microsoft.VSTS.Common.StateChangeDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.StateChangeDate] <= '${variables.endofmonth}' And [System.CreatedDate] <='${variables.endDateCSTM}'
+      limit: 7
+      config2: Closed
+      config3: Created #Whether to check history or a specific date to get the committed date for the incident -> N - Check the history by looking to the status mentioned in Config1. OR procide the field name (Created, Updated). The values could be N or Field Name (Created or Updated)
+      config4: Closed #Whether to check history or a specific date to get the Closed date for the incident -> N - Check the history by looking to the status mentioned in Config2. OR procide the field name (Closed, Resolution). The values could be N or Field Name (Created or Updated)
+      input2: N
+      input3: N
+      input4: N
+    -
+      slaname: Security Threat Mitigation
+      slakey: SecurityThreatMitigation
+      slatype: Non-BackLog
+      expectedsla: 98
+      minimumsla: 95
+      denojql: Select * From WorkItems  Where [System.WorkItemType] = 'User Story' And [System.TeamProject] = '${variables.teamProject}'  And [Custom.ServiceLevelType] = 'Security Fix'  And [Microsoft.VSTS.Common.Severity] not in ('1 - Critical')  And [System.State] Ever 'Closed' And [Microsoft.VSTS.Common.StateChangeDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.StateChangeDate] <= '${variables.endofmonth}'
+      limit: -1, 30, 60, 180
+      config2: Closed
+      config3: Created #Whether to check history or a specific date to get the committed date for the incident -> N - Check the history by looking to the status mentioned in Config1. OR procide the field name (Created, Updated). The values could be N or Field Name (Created or Updated)
+      config4: Closed #Whether to check history or a specific date to get the Closed date for the incident -> N - Check the history by looking to the status mentioned in Config2. OR procide the field name (Closed, Resolution). The values could be N or Field Name (Created or Updated)
+      config5: 1 - Critical,2 - High,3 - Medium,4 - Low
+      input2: N
+      input3: N
+      input4: N
+    -
+      slaname: Regulatory Update
+      slakey: RegulatoryUpdate
+      slatype: Non-BackLog
+      from: ${variables.from} #Measurement period Start
+      to: ${variables.to} #Measurement period End
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}' And [System.WorkItemType] = 'User Story' And [Custom.ServiceLevelType]= 'Regulatory Update' And [Microsoft.VSTS.Common.ClosedDate] >= '${variables.startofmonth}' And [Microsoft.VSTS.Common.ClosedDate] <='${variables.endofmonth}'
+      config4: Closed #N - Use N to check the revision if num jql is not provided. If num query is provided, use the date field used there
+      input2: N
+      input3: N

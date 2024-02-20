@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: Sla Automation
+  main:
+    allow-circular-references: true
+sla:
+
+slaUser:
+  baseUrl: https://dev.azure.com/premierinc/_apis/wit/wiql?api-version=6.0
+  slaData: ${slaUser.baseUrl}/api/2/search?
+  sprintName: ${slaUser.baseUrl}/agile/1.0/sprint/
+#one time configuration
+project:
+  projectkey: WFM
+  projectsource: ADO
+  projecturl: https://dev.azure.com/premierinc/_apis/wit/wiql?api-version=6.0
+  backlogBoardIds:
+  nonbacklogBoardIds:
+  outputFolder:  E:\\AutomationOutput
+  automationData: E:\\AutomationData
+  datafileRequired: Y
+  detailedLogRequired: Y
+  addToFileName: yyyyMMddHHMMSS
+  dateFormat: MM/dd/yyyy
+  sourceDateFormat: yyyy-MM-dd'T'HH:mm:ss.SX #yyyy-MM-dd'T'HH:mm:ss.SSSZ
+  releaseDateFormat: yyyy-MM-dd
+  holidays: 01/17/2022,05/30/2022,06/20/2022,07/04/2022,09/05/2022,11/11/2022,11/20/2022,12/26/2022
+  linkItemUrl: https://analytics.dev.azure.com/premierinc/SDC16ServiceLevelAutomation/_odata/v2.0/WorkItems?$select=WorkItemId&$expand=Children($filter=WorkItemType in (DEFECTTYPEVALUE); $select=WorkItemId)&$filter=WorkItemId eq WORKITEMIDVALUE
+  itemUrl: https://dev.azure.com/premierinc/_apis/wit/workItems/WORKITEMIDVALUE
+  pageSize: 1000
+#Need to change at Each run
+variables:
+  teamProject: SupplyAnalytics
+  from: 10/01/2022 #10/01/2022 #mm/dd/yyyy //This is the start date of the month with different format
+  to: 10/31/2022 #10/31/2022 #mm/dd/yyyy //This is the end date of the month with different format
+  startofmonth: 2022/10/01 #example: yyyy-mm-dd 2022-11-01 //This field is for query measurement NBL
+  endofmonth: 2022/10/31 #example: yyyy-mm-dd 2022-11-30 //This field is for query measurement NBL
+  sprintStartDate: 2022/10/01 #example: yyyy-mm-dd 2022-11-01 //This field is for query measurement BL
+  sprintEndDate: 2022/10/31 #example: yyyy-mm-dd 2022-11-30 //This field is for query measurement BL
+  iterationPath:  ('SupplyAnalytics\\FY23-S08','SupplyAnalytics\\FY23-S09') #example('WFM\\FY23-S03','WFM\\FY23-S04')
+  endDateCSTM: 2022/10/25 #example: yyyy-mm-dd 2022-11-24 #criticial security threat end date (end - 6 days)
+  areaPathBL:  #example('WFM\\SDC16 - BL OA Productivity\\Avengers','WFM\\SDC16 - BL OA Productivity\\Matrix') #areapath for BL
+  areaPathNBL: #example('WFM\\SDC16 - NBL OA Productivity\\Marvel')  #areapath for NBL
+  areaPathNBLsec: #example('WFM\\SDC16 - NBL OA Productivity\\Marvel\\Security') #areapath for Security(Criticalsecuritythreatmitigation,Security threat mitigation)
+#It is for internal purpose no need to change
+slasbacklog:
+  backlogconfiguration:
+    -
+      slaname: Time To Estimate Backlog Item
+      slakey: TimeToEstimateBacklogItems
+      slatype: BackLog
+      from: ${variables.from}
+      to: ${variables.to}
+      expectedsla: 98
+      minimumsla: 90
+      denojql: Select * From WorkItems  Where [System.TeamProject] = '${variables.teamProject}' And [System.AreaPath] in ${variables.areaPathBl} And [System.WorkItemType] not in ('Risk', 'Milestone') And [System.State] EVER 'In Analysis and Estimate'
+      limit: 3#10
+      config3: In analysis and estimate #Status used for the Issue when received for estimation
+      config4: In PI assigned with iteration
+      input2: Y #holidaycheck
+      input3: Y #weekendcheck
+      input4: Y #Include Start date
